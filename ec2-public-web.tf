@@ -1,6 +1,7 @@
 ##################################################
-# Basic EC2 instance, security groups
+# EC2 web instance, EBS volume, security group
 
+# Launch an instance and configure a web server
 resource "aws_instance" "web" {
   ami = "${var.aws_ubuntu18_ami}"
   instance_type = "t2.micro"
@@ -14,11 +15,34 @@ resource "aws_instance" "web" {
   user_data = "${file("ec2-user-data-ubuntu-web.sh")}"
 }
 
+# Attached EBS volume
+resource "aws_volume_attachment" "web_ebs" {
+  device_name  = "/dev/sdf"
+  volume_id    = "${aws_ebs_volume.web_ebs.id}"
+  instance_id  = "${aws_instance.web.id}"
+  force_detach = true
+}
+
+# Allocate EIP and attach to instance
 resource "aws_eip" "web_eip" {
   instance = "${aws_instance.web.id}"
   vpc      = true
 }
 
+# Create EBS volume
+resource "aws_ebs_volume" "web_ebs" {
+  availability_zone = "${var.vpc_az1}"
+  size              = 1
+  # Attempt to address issue with failed unmount
+  # when instance is changed but volume is not
+  depends_on = ["aws_ebs_volume.web_ebs"]
+
+  tags = {
+    Name = "${var.vpc_name}-web-ebs"
+  }
+}
+
+# Define a security group and allow SSH, HTTP
 resource "aws_security_group" "web_ec2_sg" {
   name = "${var.vpc_name}-web-ec2-sg"
   description = "Allow inbound SSH traffic from Internet"
@@ -37,12 +61,6 @@ resource "aws_security_group" "web_ec2_sg" {
     protocol = "tcp"
     cidr_blocks = ["0.0.0.0/0"]
   }
-  ingress {
-    from_port = 443
-    to_port = 443
-    protocol = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
   egress {
     from_port = 0
     to_port = 0
@@ -51,6 +69,8 @@ resource "aws_security_group" "web_ec2_sg" {
   }
   vpc_id = "${aws_vpc.vpc_aws_kata.id}"
 }
+
+# Print out various bit of information
 
 output aws_eip.web_eip.public_ip {
   value = "${aws_eip.web_eip.public_ip}"
