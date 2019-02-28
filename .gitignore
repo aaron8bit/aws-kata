@@ -1,0 +1,5 @@
+plan-*
+terraform.state.list
+terraform.tfstate*
+.lastplan
+.terraform
